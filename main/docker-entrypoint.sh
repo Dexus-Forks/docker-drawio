@@ -2,6 +2,7 @@
 #set -e
 
 LETS_ENCRYPT_ENABLED=${LETS_ENCRYPT_ENABLED:-false}
+OWN_CERT_ENABLED=${OWN_CERT_ENABLED:-false}
 PUBLIC_DNS=${PUBLIC_DNS:-'draw.example.com'}
 ORGANISATION_UNIT=${ORGANISATION_UNIT:-'Cloud Native Application'}
 ORGANISATION=${ORGANISATION:-'example inc'}
@@ -125,26 +126,34 @@ echo "App.prototype.isDriveDomain = function() { return true; }" >> $CATALINA_HO
 
 cat $CATALINA_HOME/webapps/draw/js/PostConfig.js
 
-if ! [ -f $CATALINA_HOME/.keystore ] && [ "$LETS_ENCRYPT_ENABLED" == "true" ]; then
-    echo "Generating Let's Encrypt certificate"
-    
-    keytool -genkey -noprompt -alias tomcat -dname "CN=${PUBLIC_DNS}, OU=${ORGANISATION_UNIT}, O=${ORGANISATION}, L=${CITY}, S=${STATE}, C=${COUNTRY_CODE}" -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}" -KeySize 2048 -keypass "${KEY_PASS}" -keyalg RSA -storetype pkcs12
+if [ "$OWN_CERT_ENABLED" == "true" ]; then
+    echo "Setup own certificate"
 
     keytool -list -keystore $CATALINA_HOME/.keystore -v -storepass "${KEYSTORE_PASS}"
+    keytool -importkeystore -destkeystore $CATALINA_HOME/.keystore -deststorepass "${KEYSTORE_PASS}" -srckeystore /owncert/pkcs.p12 -srcstorepass "${P12_PASS}" -srcstoretype PKCS12 -alias tomcat
 
-    keytool -certreq -alias tomcat -file request.csr -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}"
+else
+    if ! [ -f $CATALINA_HOME/.keystore ] && [ "$LETS_ENCRYPT_ENABLED" == "true" ]; then
+        echo "Generating Let's Encrypt certificate"
+        
+        keytool -genkey -noprompt -alias tomcat -dname "CN=${PUBLIC_DNS}, OU=${ORGANISATION_UNIT}, O=${ORGANISATION}, L=${CITY}, S=${STATE}, C=${COUNTRY_CODE}" -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}" -KeySize 2048 -keypass "${KEY_PASS}" -keyalg RSA -storetype pkcs12
 
-    certbot certonly --csr $CATALINA_HOME/request.csr --standalone --register-unsafely-without-email --agree-tos
+        keytool -list -keystore $CATALINA_HOME/.keystore -v -storepass "${KEYSTORE_PASS}"
 
-    keytool -import -trustcacerts -alias tomcat -file 0001_chain.pem -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}"
-fi
+        keytool -certreq -alias tomcat -file request.csr -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}"
 
-if ! [ -f $CATALINA_HOME/.keystore ] && [ "$LETS_ENCRYPT_ENABLED" == "false" ]; then
-    echo "Generating Self-Signed certificate"
+        certbot certonly --csr $CATALINA_HOME/request.csr --standalone --register-unsafely-without-email --agree-tos
 
-    keytool -genkey -noprompt -alias selfsigned -dname "CN=${PUBLIC_DNS}, OU=${ORGANISATION_UNIT}, O=${ORGANISATION}, L=${CITY}, S=${STATE}, C=${COUNTRY_CODE}" -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}" -KeySize 2048 -keypass "${KEY_PASS}" -keyalg RSA -validity 3600 -storetype pkcs12
-    
-    keytool -list -keystore $CATALINA_HOME/.keystore -v -storepass "${KEYSTORE_PASS}"
+        keytool -import -trustcacerts -alias tomcat -file 0001_chain.pem -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}"
+    fi
+
+    if ! [ -f $CATALINA_HOME/.keystore ] && [ "$LETS_ENCRYPT_ENABLED" == "false" ]; then
+        echo "Generating Self-Signed certificate"
+
+        keytool -genkey -noprompt -alias selfsigned -dname "CN=${PUBLIC_DNS}, OU=${ORGANISATION_UNIT}, O=${ORGANISATION}, L=${CITY}, S=${STATE}, C=${COUNTRY_CODE}" -keystore $CATALINA_HOME/.keystore -storepass "${KEYSTORE_PASS}" -KeySize 2048 -keypass "${KEY_PASS}" -keyalg RSA -validity 3600 -storetype pkcs12
+        
+        keytool -list -keystore $CATALINA_HOME/.keystore -v -storepass "${KEYSTORE_PASS}"
+    fi
 fi
 
 # Update SSL port configuration if it does'nt exists

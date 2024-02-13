@@ -1,0 +1,6 @@
+Added ENV `OWN_CERT_ENABLED` if this is `true` the certificate chain will read from `/owncert/pkcs.p12`
+Password for the p12 file need ENV `P12_PASS`.
+
+
+you have already once lets encrypt cert? go to the folder and run:
+`openssl pkcs12 -export -in fullchain.pem -inkey privkey.pem -out pkcs.p12 -name tomcat`
